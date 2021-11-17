@@ -4,22 +4,22 @@ use std::fs::read_to_string;
 pub enum TokenClass {
     ERROR,
     LPARENTHESIS,
+    RPARENTHESIS,
+    LCURLY,
+    RCURLY,
+    SEMICOLON,
+    PLUS,
+    RETURN,
     INT,
     VOID,
+    INTLITERAL,
     IDENTIFIER,
 }
 
+#[derive(Debug)]
 pub struct Token<'a> {
     pub class: TokenClass,
     pub str: &'a str,
-}
-
-trait TokenChecker {
-    fn check_token(&self, buffer: &str) -> usize;
-}
-
-struct FixedStringTokenChecker {
-    str: String,
 }
 
 fn is_whitespace(c: char) -> bool
@@ -31,6 +31,18 @@ fn is_whitespace(c: char) -> bool
     }
 }
 
+trait TokenChecker {
+    fn check_token(&self, buffer: &str) -> usize;
+}
+
+struct FixedStringTokenChecker {
+    str: String,
+}
+impl FixedStringTokenChecker {
+    fn new(str: &str) -> FixedStringTokenChecker {
+        FixedStringTokenChecker{str: str.to_string()}
+    }
+}
 impl TokenChecker for FixedStringTokenChecker {
     /// Returns either self.str.len() if str is the first token in buffer, or 0 if it isn't
     fn check_token(&self, buffer: &str) -> usize
@@ -44,6 +56,7 @@ impl TokenChecker for FixedStringTokenChecker {
 
         if buffer.starts_with(&self.str) {
             if   fixed_str_length == buffer_len // End of buffer
+                // TODO[CHECK] Is this actually needed?
               || is_whitespace(buffer.as_bytes()[fixed_str_length] as char) { // Next character is a string divider
 
                 return fixed_str_length;
@@ -54,10 +67,26 @@ impl TokenChecker for FixedStringTokenChecker {
     }
 }
 
-struct IdentifierTokenChecker {
+struct CharTokenChecker {
+    character: char,
+}
+impl CharTokenChecker {
+    fn new(character: char) -> CharTokenChecker {
+        CharTokenChecker{character}
+    }
+}
+impl TokenChecker for CharTokenChecker {
+    fn check_token(&self, buffer: &str) -> usize
+    {
+        if buffer.starts_with(self.character) {
+            return 1;
+        }
 
+        return 0;
+    }
 }
 
+struct IdentifierTokenChecker {}
 impl TokenChecker for IdentifierTokenChecker {
     fn check_token(&self, buffer: &str) -> usize
     {
@@ -65,12 +94,29 @@ impl TokenChecker for IdentifierTokenChecker {
         for (i, c) in buffer.chars().enumerate()
         {
             // On token end or EOF, we either matched or not
-            if    is_whitespace(c)           // end match on whitespace
-               || !(  (c >= 'a' && c <= 'z') // end match on non-matching character
-                   || (c >= 'A' && c <= 'Z')
-                   || (c >= '0' && c <= '9')
-                   || (c == '_')
-            )
+            if !(  (c >= 'a' && c <= 'z') // end match on non-matching character
+                || (c >= 'A' && c <= 'Z')
+                || (c == '_')
+                || ((i != 0) && (c >= '0' && c <= '9'))) // Digits are not allowed as first character
+            {
+                return i;
+            }
+        }
+
+        // Reached EOF and all chars matched
+        return buffer.len();
+    }
+}
+
+struct IntLiteralTokenChecker {}
+impl TokenChecker for IntLiteralTokenChecker {
+    fn check_token(&self, buffer: &str) -> usize
+    {
+        // Check each character of the buffer
+        for (i, c) in buffer.chars().enumerate()
+        {
+            // On token end or EOF, we either matched or not
+            if !(c >= '0' && c <= '9')    // end match on non-matching character
             {
                 return i;
             }
@@ -84,10 +130,6 @@ impl TokenChecker for IdentifierTokenChecker {
 pub struct Lexer {
     read_pos: usize,
     input_buffer: String,
-}
-
-macro_rules! fixed_string_token_checker {
-    ($string:literal) => { FixedStringTokenChecker{str: $string.to_string()} };
 }
 
 impl Lexer {
@@ -107,21 +149,39 @@ impl Lexer {
     // TODO[NICE]: Create an iterator instead?
     pub fn get_next_token(&mut self) -> Token {
 
+        // Throw away all whitespace
+        for c in self.input_buffer[self.read_pos..].chars()
+        {
+            if is_whitespace(c) {
+                self.read_pos += 1;
+            }
+            else {
+                break;
+            }
+        }
+
         let current_input_buffer = &self.input_buffer[self.read_pos..];
 
         let mut candidate = (TokenClass::ERROR, 1);
 
         // Try to match the front of the buffer to the supported tokens
         // This respects maximal munch and token precedence. Tokens are ordered
-        // in ascending precedence in the following if-cascade
+        // in ascending precedence in the following
 
         // TODO[FEAT]: Add checks for all tokens of the C programming language
         // TODO[PERF]: Create constants for the TokenChecker instances
 
         candidate = Self::_check_token(current_input_buffer, TokenClass::IDENTIFIER, &IdentifierTokenChecker{}, candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::VOID, &fixed_string_token_checker!("void"), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::INT, &fixed_string_token_checker!("int"), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::LPARENTHESIS, &fixed_string_token_checker!("("), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::INTLITERAL, &IntLiteralTokenChecker{}, candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::VOID, &FixedStringTokenChecker::new("void"), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::INT, &FixedStringTokenChecker::new("int"), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::RETURN, &FixedStringTokenChecker::new("return"), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::LPARENTHESIS, &CharTokenChecker::new('('), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::RPARENTHESIS, &CharTokenChecker::new(')'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::LCURLY, &CharTokenChecker::new('{'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::RCURLY, &CharTokenChecker::new('}'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::SEMICOLON, &CharTokenChecker::new(';'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::PLUS, &CharTokenChecker::new('+'), candidate);
 
         if candidate.0 == TokenClass::ERROR {
             // Token could not be parsed

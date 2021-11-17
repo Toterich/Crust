@@ -13,6 +13,6 @@ fn main() {
 
     loop {
         let token = lexer.get_next_token();
-        println!("Token: {:?}, {:?}", token.class, token.str);
+        println!("Token: {:?}", token);
     }
 }
