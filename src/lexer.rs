@@ -1,6 +1,6 @@
 use std::fs::read_to_string;
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TokenClass {
     ERROR,
     LPARENTHESIS,
@@ -10,8 +10,8 @@ pub enum TokenClass {
 }
 
 pub struct Token<'a> {
-    class: TokenClass,
-    str: &'a str,
+    pub class: TokenClass,
+    pub str: &'a str,
 }
 
 trait TokenChecker {

@@ -11,5 +11,8 @@ fn main() {
     let mut lexer = lexer::Lexer::new();
     lexer.load_input_from_file(&args[1]);
 
-    let token = lexer.get_next_token();
+    loop {
+        let token = lexer.get_next_token();
+        println!("Token: {:?}, {:?}", token.class, token.str);
+    }
 }
