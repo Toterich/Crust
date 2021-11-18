@@ -39,7 +39,8 @@ struct FixedStringTokenChecker {
     str: String,
 }
 impl FixedStringTokenChecker {
-    fn new(str: &str) -> FixedStringTokenChecker {
+    fn new<T>(str: T) -> FixedStringTokenChecker
+    where T: ToString {
         FixedStringTokenChecker{str: str.to_string()}
     }
 }
@@ -47,39 +48,8 @@ impl TokenChecker for FixedStringTokenChecker {
     /// Returns either self.str.len() if str is the first token in buffer, or 0 if it isn't
     fn check_token(&self, buffer: &str) -> usize
     {
-        let fixed_str_length = self.str.len();
-        let buffer_len = buffer.len();
-
-        if fixed_str_length > buffer_len {
-            return 0;
-        }
-
         if buffer.starts_with(&self.str) {
-            if   fixed_str_length == buffer_len // End of buffer
-                // TODO[CHECK] Is this actually needed?
-              || is_whitespace(buffer.as_bytes()[fixed_str_length] as char) { // Next character is a string divider
-
-                return fixed_str_length;
-            }
-        }
-
-        return 0;
-    }
-}
-
-struct CharTokenChecker {
-    character: char,
-}
-impl CharTokenChecker {
-    fn new(character: char) -> CharTokenChecker {
-        CharTokenChecker{character}
-    }
-}
-impl TokenChecker for CharTokenChecker {
-    fn check_token(&self, buffer: &str) -> usize
-    {
-        if buffer.starts_with(self.character) {
-            return 1;
+            return self.str.len();
         }
 
         return 0;
@@ -170,18 +140,20 @@ impl Lexer {
 
         // TODO[FEAT]: Add checks for all tokens of the C programming language
         // TODO[PERF]: Create constants for the TokenChecker instances
+        // TODO[PERF]: This re-reads the input_buffer's characters for each Token. Maybe it would be better to only read each input
+        //             char once and use an incremental check_char method on the TokenCheckers instead?
 
         candidate = Self::_check_token(current_input_buffer, TokenClass::IDENTIFIER, &IdentifierTokenChecker{}, candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::INTLITERAL, &IntLiteralTokenChecker{}, candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::VOID, &FixedStringTokenChecker::new("void"), candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::INT, &FixedStringTokenChecker::new("int"), candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::RETURN, &FixedStringTokenChecker::new("return"), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::LPARENTHESIS, &CharTokenChecker::new('('), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::RPARENTHESIS, &CharTokenChecker::new(')'), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::LCURLY, &CharTokenChecker::new('{'), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::RCURLY, &CharTokenChecker::new('}'), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::SEMICOLON, &CharTokenChecker::new(';'), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::PLUS, &CharTokenChecker::new('+'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::LPARENTHESIS, &FixedStringTokenChecker::new('('), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::RPARENTHESIS, &FixedStringTokenChecker::new(')'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::LCURLY, &FixedStringTokenChecker::new('{'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::RCURLY, &FixedStringTokenChecker::new('}'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::SEMICOLON, &FixedStringTokenChecker::new(';'), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::PLUS, &FixedStringTokenChecker::new('+'), candidate);
 
         if candidate.0 == TokenClass::ERROR {
             // Token could not be parsed
