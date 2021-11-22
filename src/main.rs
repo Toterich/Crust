@@ -1,6 +1,8 @@
 use std::env;
+use std::io::stdin;
 
 mod lexer;
+mod errorhandler;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -10,6 +12,7 @@ fn main() {
 
     let mut lexer = lexer::Lexer::new();
     lexer.load_input_from_file(&args[1]);
+
 
     loop {
         let token = lexer.get_next_token();

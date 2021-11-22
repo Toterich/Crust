@@ -1,14 +1,17 @@
+/**
+ * The lexer takes as input the C source file to be compiled and outputs a stream of Tokens. This token stream in turn
+ * is the input of the parser.
+ *
+ * Currently, the lexer implementation assumes the input file to contain only ASCII characters.
+ */
 use std::fs::read_to_string;
+
+use super::errorhandler;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TokenClass {
-    ERROR,
-    LPARENTHESIS,
-    RPARENTHESIS,
-    LCURLY,
-    RCURLY,
-    SEMICOLON,
-    PLUS,
+    ERROR, // No valid token
+    SINGLECHAR, // Combined class for all single-character tokens
     RETURN,
     INT,
     VOID,
@@ -20,6 +23,10 @@ pub enum TokenClass {
 pub struct Token<'a> {
     pub class: TokenClass,
     pub str: &'a str,
+
+    // position inside file
+    pub line: usize,
+    pub pos: usize,
 }
 
 fn is_whitespace(c: char) -> bool
@@ -35,19 +42,34 @@ trait TokenChecker {
     fn check_token(&self, buffer: &str) -> usize;
 }
 
+struct SingleCharTokenChecker {}
+impl TokenChecker for SingleCharTokenChecker {
+    fn check_token(&self, buffer: &str) -> usize {
+        let char = buffer.chars().next();
+        match char {
+            None => 0, // No chars in buffer
+            Some(c) => match c {
+                '!' | '&' | '|' | '^' | '~' | '?' |
+                '(' | ')' | '{' | '}' | '[' | ']' |
+                '*' | '+' | '-' | '/' | '<' | '>' | '=' |
+                ',' | '.' | ';' | ':' => 1, // Valid single-char token
+                _ => 0 // No valid single-char token
+            }
+        }
+    }
+}
+
 struct FixedStringTokenChecker {
     str: String,
 }
 impl FixedStringTokenChecker {
-    fn new<T>(str: T) -> FixedStringTokenChecker
-    where T: ToString {
+    fn new<T: ToString>(str: T) -> FixedStringTokenChecker {
         FixedStringTokenChecker{str: str.to_string()}
     }
 }
 impl TokenChecker for FixedStringTokenChecker {
     /// Returns either self.str.len() if str is the first token in buffer, or 0 if it isn't
-    fn check_token(&self, buffer: &str) -> usize
-    {
+    fn check_token(&self, buffer: &str) -> usize {
         if buffer.starts_with(&self.str) {
             return self.str.len();
         }
@@ -102,6 +124,11 @@ pub struct Lexer {
     input_buffer: String,
 }
 
+struct TokenCandidate {
+    class: TokenClass,
+    length: usize
+}
+
 impl Lexer {
     pub fn new() -> Lexer {
         Lexer{read_pos: 0, input_buffer: "".to_string()}
@@ -111,8 +138,8 @@ impl Lexer {
         let result = read_to_string(file_descriptor);
         // TODO[MAINT]: Handle errors in this function's caller instead
         match result {
-            Ok(str) => {self.input_buffer = str; true},
-            Err(e) => {println!("Error reading file {}: {}", file_descriptor, e); false},
+            Ok(str) => {self.input_buffer = str; self.read_pos = 0; true},
+            Err(e) => {errorhandler::file_read_error(file_descriptor, &e); false},
         }
     }
 
@@ -132,7 +159,7 @@ impl Lexer {
 
         let current_input_buffer = &self.input_buffer[self.read_pos..];
 
-        let mut candidate = (TokenClass::ERROR, 1);
+        let mut candidate = TokenCandidate{class: TokenClass::ERROR, length: 1};
 
         // Try to match the front of the buffer to the supported tokens
         // This respects maximal munch and token precedence. Tokens are ordered
@@ -145,33 +172,31 @@ impl Lexer {
 
         candidate = Self::_check_token(current_input_buffer, TokenClass::IDENTIFIER, &IdentifierTokenChecker{}, candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::INTLITERAL, &IntLiteralTokenChecker{}, candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::SINGLECHAR, &SingleCharTokenChecker{}, candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::VOID, &FixedStringTokenChecker::new("void"), candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::INT, &FixedStringTokenChecker::new("int"), candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::RETURN, &FixedStringTokenChecker::new("return"), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::LPARENTHESIS, &FixedStringTokenChecker::new('('), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::RPARENTHESIS, &FixedStringTokenChecker::new(')'), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::LCURLY, &FixedStringTokenChecker::new('{'), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::RCURLY, &FixedStringTokenChecker::new('}'), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::SEMICOLON, &FixedStringTokenChecker::new(';'), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::PLUS, &FixedStringTokenChecker::new('+'), candidate);
 
-        if candidate.0 == TokenClass::ERROR {
-            // Token could not be parsed
-            // TODO[MAINT]: Handle errors in this function's caller instead
-            println!("Could not read a valid token at input position {}.", self.read_pos);
-            std::process::exit(-1);
+        let token =  Token{class: candidate.class,
+                           str: &current_input_buffer[0..candidate.length],
+                           line: 0, // TODO: Attach proper token position
+                           pos: self.read_pos};
+
+        // No token matched, so report an error
+        if token.class == TokenClass::ERROR {
+            errorhandler::token_error(&token);
         }
 
         // Advance the read buffer
-        self.read_pos += candidate.1;
+        self.read_pos += candidate.length;
 
-        return Token{class: candidate.0, str: &current_input_buffer[0..candidate.1]};
+        return token;
     }
 
-    fn _check_token(buffer: &str, token: TokenClass, checker: &dyn TokenChecker, prev_candidate: (TokenClass, usize)) -> (TokenClass, usize) {
+    fn _check_token(buffer: &str, token: TokenClass, checker: &dyn TokenChecker, prev_candidate: TokenCandidate) -> TokenCandidate{
         let length = checker.check_token(buffer);
-        if length >= prev_candidate.1 {
-            return (token, length);
+        if length >= prev_candidate.length {
+            return TokenCandidate{class: token, length: length};
         }
         return prev_candidate;
     }
