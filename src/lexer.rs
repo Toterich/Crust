@@ -1,5 +1,5 @@
 /**
- * The lexer takes as input the C source file to be compiled and outputs a stream of Tokens. This token stream in turn
+ * The lexer takes as input the Crust source file to be compiled and outputs a stream of Tokens. This token stream in turn
  * is the input of the parser.
  *
  * Currently, the lexer implementation assumes the input file to contain only ASCII characters.
@@ -12,9 +12,10 @@ use super::errorhandler;
 pub enum TokenClass {
     ERROR, // No valid token
     SINGLECHAR, // Combined class for all single-character tokens
+    RETTYPE, // "->"
+    FUNCTION,
     RETURN,
-    INT,
-    VOID,
+    INT32,
     INTLITERAL,
     IDENTIFIER,
 }
@@ -165,7 +166,7 @@ impl Lexer {
         // This respects maximal munch and token precedence. Tokens are ordered
         // in ascending precedence in the following
 
-        // TODO[FEAT]: Add checks for all tokens of the C programming language
+        // TODO[FEAT]: Add checks for all tokens of the Crust programming language
         // TODO[PERF]: Create constants for the TokenChecker instances
         // TODO[PERF]: This re-reads the input_buffer's characters for each Token. Maybe it would be better to only read each input
         //             char once and use an incremental check_char method on the TokenCheckers instead?
@@ -173,8 +174,9 @@ impl Lexer {
         candidate = Self::_check_token(current_input_buffer, TokenClass::IDENTIFIER, &IdentifierTokenChecker{}, candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::INTLITERAL, &IntLiteralTokenChecker{}, candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::SINGLECHAR, &SingleCharTokenChecker{}, candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::VOID, &FixedStringTokenChecker::new("void"), candidate);
-        candidate = Self::_check_token(current_input_buffer, TokenClass::INT, &FixedStringTokenChecker::new("int"), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::RETTYPE, &FixedStringTokenChecker::new("->"), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::FUNCTION, &FixedStringTokenChecker::new("function"), candidate);
+        candidate = Self::_check_token(current_input_buffer, TokenClass::INT32, &FixedStringTokenChecker::new("int32"), candidate);
         candidate = Self::_check_token(current_input_buffer, TokenClass::RETURN, &FixedStringTokenChecker::new("return"), candidate);
 
         let token =  Token{class: candidate.class,

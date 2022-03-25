@@ -1,7 +1,7 @@
 use std::env;
-use std::io::stdin;
 
 mod lexer;
+mod parser;
 mod errorhandler;
 
 fn main() {

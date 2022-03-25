@@ -1,8 +1,8 @@
 use std::io::Error as IoError;
 
-use super::lexer;
+use super::lexer::Token;
 
-pub fn token_error(token: &lexer::Token) {
+pub fn token_error(token: &Token) {
     println!("Token Error at line {}, pos {}: Can't parse token \'{:?}\'", token.line, token.pos, token.str);
     finish(-1);
 }

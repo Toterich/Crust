@@ -1,0 +1,28 @@
+// Each Crust program requires a main() method as its entry point.
+function main(argc: int32, argv: char*[]) -> int64
+{
+    /*
+    Some things to note:
+
+        - Function definitions start with the "function" keyword.
+        - The return type of a function is indicated by the "->" token.
+        - Parameter declarations start with the param's name, followed by
+          its type.
+        - Numeric types of multiple widths exist.
+
+    Block comments are supported btw.
+    */
+
+    // Standard library functions are automatically made available
+    print("Hello world!");
+
+    for (i: int32 = 0; i < argc; i++)
+    {
+        // print uses the well-known printf interface
+        print("Hello %s!", argv[i]);
+    }
+
+    // The integer literal is autocasted to int64 here
+    return                 0;
+    // Also, whitespace does not matter.
+}
